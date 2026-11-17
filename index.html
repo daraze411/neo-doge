@@ -233,6 +233,11 @@ summary{font-family:var(--cond);font-weight:600;font-size:16px;letter-spacing:.0
 .hm-in:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .menuitem{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 14px;border-radius:10px;background:var(--panel);border:1px solid var(--line);cursor:pointer}
 .jt{text-align:justify;hyphens:auto;-webkit-hyphens:auto}
+.hm-h{font-family:var(--cond);font-weight:700;font-size:30px;letter-spacing:.06em;text-transform:uppercase;margin:0;text-align:center}
+.hm-seg.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.hm-seg.two .hb{padding-inline:6px}
+.mpcode{font-family:var(--cond);font-weight:700;font-size:44px;letter-spacing:.3em;text-align:center;color:var(--accent);padding-left:.3em}
+.hm-st{color:var(--muted);text-align:center;margin:0}.hm-st.ok{color:var(--li)}
+a.hb{text-decoration:none;display:inline-block;text-align:center}
 .hm-menu{display:grid;gap:8px}.hm-menu .hb.ghost{justify-self:center}
 .menuitem.pri{background:var(--accent);border-color:var(--accent);color:#04121c}.menuitem.pri .ar{color:#04121c}
 .hm-foot{font-family:var(--cond);font-weight:600;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:center;line-height:1.5;margin-top:6px;padding-bottom:12px}
@@ -708,11 +713,11 @@ function aiDecide(G,p,level){
 }
 
 // ---------- Stato partita ----------
-let G=null;
+let G=null,ME=0,MP=null;
 let UI={phase:'idle'};
-function newGame(nAI){
-  nAI=nAI||OPT.ai;
-  const n=nAI+1,per=n===2?16:18,pool=[];
+function newGame(nAI,mp){
+  if(!mp){nAI=nAI||OPT.ai;ME=0;mpClose()}
+  const n=mp?2+nAI:nAI+1,per=n===2?16:18,pool=[];
   for(let f=0;f<3;f++)for(let i=0;i<per-2;i++)pool.push(f);
   shuffle(pool);
   const B={f:R.map(()=>[0,0,0]),ctrl:R.map(()=>null),sup:[0,0,0],order:[],court:[],instab:0,lastWin:[0,0,0],sn:0};
@@ -722,14 +727,19 @@ function newGame(nAI){
   pool.forEach(f=>B.sup[f]++);
   B.order=shuffle([0,1,2,3,4,5,6,7]).map(r=>({r,up:true,nego:false,res:null}));
   let foes=AI_NAMES.slice();
-  if(nAI===1){const pick=OPT.opp==='casuale'?(Math.random()<.5?'baciccia':'rina'):OPT.opp;foes=[pick==='rina'?'Sciâ Rina':'BacicciaBot']}
-  const players=[{name:esc(OPT.name)||'Tu',ai:false},...foes.map(name=>({name:esc(name),ai:true}))]
+  if(mp){foes=nAI?[mp.ai==='rina'?'Sciâ Rina':'BacicciaBot']:[]}
+  else if(nAI===1){const pick=OPT.opp==='casuale'?(Math.random()<.5?'baciccia':'rina'):OPT.opp;foes=[pick==='rina'?'Sciâ Rina':'BacicciaBot']}
+  const humans=mp?[{name:esc(mp.names[0])||'Tu',ai:false},{name:esc(mp.names[1])||'Amico',ai:false}]:[{name:esc(OPT.name)||'Tu',ai:false}];
+  if(mp&&humans[0].name===humans[1].name)humans[1].name+=' 2';
+  const players=[...humans,...foes.map(name=>({name:esc(name),ai:true}))]
     .map(pl=>({...pl,hand:START.slice(),played:[],emptiedAt:null,lastPlayAt:0}));
-  G={B,players,dif:OPT.dif,cur:Math.floor(Math.random()*n),passes:0,last:null,actionNo:0,log:[],over:null,flash:null};
+  G={B,players,dif:mp&&mp.dif||OPT.dif,cur:Math.floor(Math.random()*n),passes:0,last:null,actionNo:0,log:[],over:null,flash:null,gid:Math.random().toString(36).slice(2,8),evn:0,ev:[]};
+  if(mp)G.mp=true;
   UI={phase:'idle'};
-  resetPop();addLog(`La partita comincia. ${G.cur===0?'Inizi <b>tu</b>.':`Inizia <b>${players[G.cur].name}</b>.`}`,'start','Nuova partita');
+  resetPop();addLog(`La partita comincia. ${T(G.cur,'Inizi <b>tu</b>.','Inizia <b>$n</b>.')}`,'start','Nuova partita');
 }
-function addLog(html,kind,head,ms){G.log.unshift(html);if(G.log.length>80)G.log.pop();if(kind)announce(kind,head,html,ms)}
+function addLog(html,kind,head,ms,p){G.log.unshift(html);if(G.log.length>80)G.log.pop();
+  if(kind){const ev={id:(G.evn=(G.evn||0)+1),kind,head,html,ms,p};(G.ev=G.ev||[]).push(ev);if(G.ev.length>30)G.ev.shift();announce(kind,head,html,ms,p)}}
 // ---------- Animazioni dei seguaci ----------
 let pendingFly=null;
 const SUP_PT0={x:1397,y:64},SUP_PTC={x:393,y:37};
@@ -765,7 +775,7 @@ const BLOB=CMARK.map(([x,y],r)=>blobPath(x,y,HOME.includes(r)?52:50,HOME.include
 const CW=88,CH=46,CHH=58;
 function isCompact(){if(typeof document==='undefined')return false;const w=document.getElementById('mapwrap');return w?w.clientWidth<760:false}
 function regPt(r,f){if(COMPACT){const h=HOME.includes(r)?CHH:CH;return{x:CMARK[r][0]-CW/2+7+f*27+5,y:CMARK[r][1]-h/2+20+5}}const h=HOME.includes(r)?MHH:MH;return{x:MARK[r][0]-MW/2+10+f*42+7.5,y:MARK[r][1]-h/2+29+7.5}}
-const courtPt=p=>COMPACT?(p===0?{x:210,y:570}:{x:210,y:-30}):(p===0?{x:726,y:730}:{x:726,y:-40});
+const courtPt=p=>COMPACT?(p===ME?{x:210,y:570}:{x:210,y:-30}):(p===ME?{x:726,y:730}:{x:726,y:-40});
 function flightsFor(cid,m){
   if(!m)return[];const t=CARD[cid].t,o=[];
   if(t==='sup')for(let i=0;i<m.n;i++)o.push({f:m.f,from:SUP_PT,to:regPt(m.r,m.f)});
@@ -808,24 +818,26 @@ const INV_QUOTES=[
 // ---------- Pop-up delle mosse ----------
 const Q=[];let qBusy=false,qTimer=null,idleWaiters=[];
 const POP_MS={start:2200,act:2800,sum:2000,pass:1700,res:3400,unrest:3400,info:1800};
-function announce(kind,head,html,ms){
+function announce(kind,head,html,ms,p){
   if(typeof document==='undefined')return;
-  Q.push({kind,head,html,ms:ms||POP_MS[kind]||2000});if(!qBusy)nextPop();
+  Q.push({kind,head,html,ms,p});if(!qBusy)nextPop();
 }
 function nextPop(){
   clearTimeout(qTimer);const el=document.getElementById('pop');
   if(!Q.length){qBusy=false;el.hidden=true;const w=idleWaiters;idleWaiters=[];w.forEach(f=>f());return}
-  qBusy=true;const a=Q.shift();
+  qBusy=true;const a=Q.shift();a.ms=a.ms||(a.kind==='act'&&a.p!==undefined?(a.p===ME?2800:5600):POP_MS[a.kind]||2000);
   el.className='pop k-'+a.kind;
-  el.innerHTML=`<div class="ph"><span>${a.head}</span><span class="pq">${Q.length?'+'+Q.length:''}</span></div><div class="pb">${a.html}</div><div class="pbar"><i style="animation-duration:${a.ms}ms"></i></div>`;
+  el.innerHTML=`<div class="ph"><span>${loc(a.head)}</span><span class="pq">${Q.length?'+'+Q.length:''}</span></div><div class="pb">${loc(a.html)}</div><div class="pbar"><i style="animation-duration:${a.ms}ms"></i></div>`;
   el.hidden=false;qTimer=setTimeout(nextPop,a.ms);
 }
 function whenIdle(fn,delay=0){const run=()=>setTimeout(fn,delay);if(typeof document==='undefined'||(!qBusy&&!Q.length))run();else idleWaiters.push(run)}
 function resetPop(){Q.length=0;idleWaiters=[];clearTimeout(qTimer);qBusy=false;if(typeof document!=='undefined')document.getElementById('pop').hidden=true}
-const who=p=>p===0?'La tua mossa':`Mossa di ${G.players[p].name}`;
+const T=(p,tu,oth)=>`\u0001${p}|${tu}|${oth}\u0002`;
+function loc(x){return typeof x==='string'&&x.indexOf('\u0001')>=0?x.replace(/\u0001(\d)\|([^|\u0002]*)\|([^\u0002]*)\u0002/g,(m,p,a,b)=>+p===ME?a:b.replace('$n',()=>G.players[+p].name)):x}
+const who=p=>T(p,'La tua mossa','Mossa di $n');
 const fx=(f,pl)=>`<span class="fx f${f}">${shp(f)} ${pl?F[f].name:F[f].one}</span>`;
 const rn=r=>`<b>${R[r].name}</b>`;
-const subj=(p,tu,lui)=>p===0?tu:`<b>${G.players[p].name}</b> ${lui}`;
+const subj=(p,tu,lui)=>T(p,tu,`<b>$n</b> ${lui}`);
 function describe(p,cid,m){
   const c=CARD[cid],s=`${subj(p,'Giochi','gioca')} <i>${c.name}</i>`;
   if(!m)return s+': <i>nessun effetto</i>.';
@@ -847,10 +859,10 @@ function playAction(p,cid,m){
   G.actionNo++;pl.lastPlayAt=G.actionNo;
   if(!pl.hand.length&&pl.emptiedAt==null)pl.emptiedAt=G.actionNo;
   G.passes=0;G.flash={ids:touched(cid,m),t:Date.now()};
-  addLog(describe(p,cid,m),'act',who(p),p===0?2800:5600);
+  addLog(describe(p,cid,m),'act',who(p),undefined,p);
 }
 function doSummon(p,s){queueFly([{f:s.f,from:regPt(s.r,s.f),to:courtPt(p),fade:true}]);applySummon(G.B,p,s);G.flash={ids:[s.r],t:Date.now()};
-  addLog(`${subj(p,'Recluti','recluta')} un ${fx(s.f)} da ${rn(s.r)}.`,'sum',p===0?'Il tuo reclutamento':`Reclutamento di ${G.players[p].name}`)}
+  addLog(`${subj(p,'Recluti','recluta')} un ${fx(s.f)} da ${rn(s.r)}.`,'sum',T(p,'Il tuo reclutamento','Reclutamento di $n'))}
 function doPass(p,why){
   G.passes++;addLog(`${subj(p,'Passi','passa')}${why||''}.${G.passes<G.players.length?` Passaggi di fila: ${G.passes}/${G.players.length}.`:''}`,'pass',who(p));
   const n=G.players.length;
@@ -886,7 +898,7 @@ function schedule(){
   if(!G||G.over)return;
   const seq=++turnSeq,p=G.cur,pl=G.players[p];
   if(pl.ai)whenIdle(()=>aiTurn(seq),450);
-  else if(!pl.hand.length)whenIdle(()=>{if(seq===turnSeq&&!G.over&&G.cur===p)doPass(p,': non hai più carte')},600);
+  else if(!pl.hand.length)whenIdle(()=>{if(seq===turnSeq&&!G.over&&G.cur===p)doPass(p,T(p,': non hai più carte',': non ha più carte'))},600);
 }
 function aiTurn(seq){
   if(seq!==turnSeq||!G||G.over)return;const p=G.cur;if(!G.players[p].ai)return;
@@ -928,18 +940,27 @@ function advance(){
 }
 function finishPick(){
   const m=UI.moves[0];
-  if(UI.phase==='pick'){const cid=UI.cid;UI={phase:'idle'};playAction(0,cid,m);startSummon()}
-  else if(UI.phase==='summon'){UI={phase:'idle'};doSummon(0,m);endTurn()}
+  if(UI.phase==='pick'){const cid=UI.cid;UI={phase:'idle'};humanPlay(cid,m)}
+  else if(UI.phase==='summon'){UI={phase:'idle'};humanSummon(m)}
+}
+const MPG=()=>!!(MP&&MP.role==='guest'&&G&&G.mp);
+function humanPlay(cid,m){
+  if(MPG()){mpSend({t:'act',cid,m});UI={phase:'wait'};render();return}
+  playAction(ME,cid,m);startSummon();
+}
+function humanSummon(s){
+  if(MPG()){mpSend({t:'sum',s});UI={phase:'wait'};render();return}
+  doSummon(ME,s);endTurn();
 }
 function startSummon(){
   const ss=genSummons(G.B);
-  if(!ss.length){addLog('Nessun seguace da reclutare.','info',who(0));endTurn();return}
+  if(!ss.length){if(MPG()){mpSend({t:'sum',s:null});UI={phase:'wait'};render();return}addLog('Nessun seguace da reclutare.','info',who(ME));endTurn();return}
   UI={phase:'summon',all:ss,moves:ss,fields:FIELDS_SUMMON,step:0,picks:{}};advance();
 }
-function myTurn(){return G&&!G.over&&G.cur===0}
+function myTurn(){return G&&!G.over&&G.cur===ME}
 function beginCard(i){
   if(!myTurn()||UI.phase!=='idle')return;
-  const cid=G.players[0].hand[i],moves=genMoves(G.B,cid,0,G.last);
+  const cid=G.players[ME].hand[i],moves=genMoves(G.B,cid,ME,G.last);
   if(!moves.length){UI={phase:'noeffect',cid,hi:i};render();return}
   UI={phase:'pick',cid,hi:i,all:moves,moves,fields:FIELDS[CARD[cid].t](moves),step:0,picks:{}};
   advance();render();
@@ -1098,7 +1119,7 @@ function renderInfo(){
   let head;
   if(G.over)head=`<div class="big">${G.over.kind==='inv'?'Invasione dei Piemontesi':'Elezione del Neo-Doge'}</div>`;
   else head=`<div class="eyebrow">Prossima resa dei conti · passaggi di fila ${G.passes}/${n}</div><div class="big ${fc.alarm?'alarm':''}">${R[fc.r].name}: ${fc.txt}</div>`;
-  document.getElementById('status').innerHTML=head+`<div class="ticker" aria-live="polite">${G.log[0]||''}</div>`;
+  document.getElementById('status').innerHTML=head+`<div class="ticker" aria-live="polite">${loc(G.log[0]||'')}</div>`;
   document.getElementById('players').innerHTML=G.players.map((pl,i)=>{
     const lastC=pl.played.length?CARD[pl.played[pl.played.length-1]].name:null;
     return`<div class="pl ${i===G.cur&&!G.over?'cur':''}"><div class="pn">${pl.name}${pl.ai?' <span class="tag">IA</span>':''}</div>
@@ -1107,10 +1128,11 @@ function renderInfo(){
   document.getElementById('supply').innerHTML=`<span class="eyebrow">Riserva</span>`+[0,1,2].map(f=>`<span title="${F[f].name}">${shp(f)}${B.sup[f]}</span>`).join('');
 }
 function renderDock(){
-  const d=document.getElementById('dock'),pl=G.players[0],n=G.players.length;
+  const d=document.getElementById('dock'),pl=G.players[ME],n=G.players.length;
   let prompt='',acts='',opts='';
   if(G.over){prompt='<b>Partita finita.</b>';acts=`<button class="btn pri" data-act="result">Risultato</button>`}
-  else if(G.cur!==0){prompt=`Tocca a <b>${G.players[G.cur].name}</b>…`}
+  else if(G.cur!==ME){prompt=`Tocca a <b>${G.players[G.cur].name}</b>…`}
+  else if(UI.phase==='wait'){prompt='Invio della mossa…'}
   else if(UI.phase==='idle'){
     if(!pl.hand.length)prompt='Non hai più carte: passi.';
     else{prompt='<b>Tocca a te.</b> Gioca una carta oppure passa.';
@@ -1135,10 +1157,10 @@ function renderDock(){
     return`<button class="tile ${on?'on':''}" data-act="card" data-i="${i}" ${canPlay?'':'disabled'}><span class="ti">${icon}</span><span class="tn">${c.name}</span><span class="td">${c.d}</span></button>`}).join('');
   d.innerHTML=`<div class="dockin"><div class="prow"><div class="prompt">${prompt}</div><div class="acts">${acts}</div></div>${opts?`<div class="opts">${opts}</div>`:''}${hand?`<div class="hand">${hand}</div>`:''}</div>`;
 }
-function renderLog(){document.getElementById('log').innerHTML=G.log.map(h=>`<li>${h}</li>`).join('')}
+function renderLog(){document.getElementById('log').innerHTML=G.log.map(h=>`<li>${loc(h)}</li>`).join('')}
 function sizeDock(){const d=document.getElementById('dock');
   const h=d.offsetHeight;document.body.style.setProperty('--dockh',h+'px')}
-function save(){try{localStorage.setItem('neodoge.v1',JSON.stringify(G))}catch(e){}}
+function save(){if(G&&G.mp)return;try{localStorage.setItem('neodoge.v1',JSON.stringify(G))}catch(e){}}
 let lastPickKey='';
 function ensureMapVisible(){
   if(typeof document==='undefined')return;const sel=selRegions();if(!sel){lastPickKey='';return}
@@ -1146,7 +1168,7 @@ function ensureMapVisible(){
   const w=document.getElementById('mapwrap').getBoundingClientRect(),dockTop=innerHeight-document.getElementById('dock').offsetHeight;
   if(w.top<0||w.bottom>dockTop-6){const dy=w.top-8;try{window.scrollBy({top:dy,behavior:'smooth'})}catch(e){window.scrollBy(0,dy)}}
 }
-function render(){if(!G)return;renderRec();renderMap();runFly();renderCal();renderInfo();renderDock();renderLog();sizeDock();save();ensureMapVisible()}
+function render(){if(!G)return;renderRec();renderMap();runFly();renderCal();renderInfo();renderDock();renderLog();sizeDock();save();ensureMapVisible();mpBroadcast()}
 
 // ---------- Le tue partite: statistiche v2 ----------
 const ST_KEY='neodoge.stats.v3',CODE_PRE='NDG1-',CODE_MAX=100000;
@@ -1176,7 +1198,7 @@ const okRec=r=>r&&okN(r.w)&&okN(r.l)&&okN(r.p);
 function validStats(s){return!!(s&&s.opp&&s.end&&s.dif&&okRec(s.opp[1])&&okRec(s.opp[2])&&okRec(s.end.cor)&&okRec(s.end.inv)&&okRec(s.dif.facile)&&okRec(s.dif.normale)&&okRec(s.dif.spietata)&&okN(s.streak)&&okN(s.best))}
 function totals(){const o=getStats().opp,t=blankRec();[1,2].forEach(n=>{t.w+=o[n].w;t.l+=o[n].l;t.p+=o[n].p});return t}
 function recordResult(){
-  if(!G||!G.over||G.recorded)return;G.recorded=true;
+  if(!G||!G.over||G.recorded||G.mp)return;G.recorded=true;
   const s=getStats(),w=G.over.winners,k=w.includes(0)?(w.length>1?'p':'w'):'l',n=G.players.length-1;
   s.opp[n][k]++;s.end[G.over.kind][k]++;
   s.dif[G.dif||'spietata'][k]++;
@@ -1310,34 +1332,197 @@ function showStats(){
 }
 function showSetup(){
   const m=document.getElementById('modal');m.hidden=false;m.classList.add('home');
-  const mm=MAPMODES.find(x=>x.id===MAPMODE);
   m.innerHTML=`<canvas class="leaves" id="leaves" aria-hidden="true"></canvas>
   <div class="hm" role="dialog" aria-modal="true" aria-labelledby="dt">
     <div class="flagban" aria-hidden="false"><span class="fv"></span><h2 id="dt" class="fh">Neo-Doge</h2></div>
     <p class="hm-tag">Genova 2147 · il trono è vuoto</p>
     <p class="jt">Il Neo-Doge è morto. La Superba è divisa: Sudamericani, Nativi Liguri e Camalli si contendono otto quartieri, ma nessuna fazione è abbastanza forte da prendersi il trono da sola.</p>
     <p class="hm-mut jt">Non hai un esercito. Hai otto mosse e una corte di seguaci: fai vincere la fazione giusta e diventa il suo candidato.</p>
-    <div class="hm-sec"><label class="hm-lab" for="pname">Il tuo nome</label>
-      <input id="pname" class="hm-in" type="text" maxlength="16" autocomplete="nickname" placeholder="Come ti chiami?" value="${esc(OPT.name)}"></div>
-    <div class="hm-sec"><div class="hm-lab">Avversari</div>
+    <div class="hm-menu">
+      <button class="menuitem pri" data-act="play"><span><span class="mt">Gioca</span></span><span class="ar" aria-hidden="true">→</span></button>
+      <button class="menuitem" data-act="rules"><span><span class="mt">Regolamento</span></span><span class="ar" aria-hidden="true">→</span></button>
+      <button class="menuitem" data-act="mystats"><span><span class="mt">Le tue partite</span><span class="ms">${summaryLine()}</span></span><span class="ar" aria-hidden="true">→</span></button>
+      ${G&&G.started&&!G.over?'<button class="hb ghost" data-act="close">Torna alla partita</button>':''}
+    </div>
+    <p class="hm-foot">Neo-Doge è un omaggio senza scopo di lucro a The King Is Dead di Peer Sylvester. Se ti è piaciuto, compra l’originale.</p>
+  </div>`;
+  startLeaves();
+}
+let NGMODE='cpu';
+function showNewGame(){
+  const m=document.getElementById('modal');m.hidden=false;m.classList.add('home');
+  const mm=MAPMODES.find(x=>x.id===MAPMODE),fr=NGMODE==='amico';
+  const cpu=`<div class="hm-sec"><div class="hm-lab">Avversari</div>
       <div class="hm-seg"><button class="hb" data-ai="1" aria-pressed="${OPT.ai===1}">1 avversario</button><button class="hb" data-ai="2" aria-pressed="${OPT.ai===2}">2 avversari</button></div>
       <div class="hm-seg three" id="oppRow" ${OPT.ai===1?'':'hidden'}>${OPPS.map(x=>`<button class="hb" data-opp="${x.id}" aria-pressed="${OPT.opp===x.id}">${x.name}</button>`).join('')}</div>
       <p class="hm-mut small" id="oppBoth" ${OPT.ai===2?'':'hidden'}>Giochi contro BacicciaBot e Sciâ Rina insieme.</p></div>
     <div class="hm-sec"><div class="hm-lab">Difficoltà</div>
       <div class="hm-seg three">${DIFS.map(x=>`<button class="hb" data-dif="${x.id}" aria-pressed="${OPT.dif===x.id}">${x.name}</button>`).join('')}</div>
-      <p class="hm-mut small" id="difCap">${DIFS.find(x=>x.id===OPT.dif).d}</p></div>
+      <p class="hm-mut small" id="difCap">${DIFS.find(x=>x.id===OPT.dif).d}</p></div>`;
+  const amico=`<p class="hm-mut small jt">Si gioca in diretta, ognuno dal proprio telefono. Crea una stanza e manda il link all’amico, oppure entra con il codice che ti ha dato lui. Le partite con amici non contano nelle statistiche.</p>`;
+  const bottom=fr?`<div class="hm-menu"><button class="menuitem pri" data-act="mp-create"><span><span class="mt">Crea una stanza</span></span><span class="ar" aria-hidden="true">→</span></button>
+      <div class="hm-sec"><label class="hm-lab" for="mpcode">Hai già un codice?</label>
+      <div class="hm-row"><input id="mpcode" class="hm-in" style="flex:1;min-width:0;text-transform:uppercase" type="text" maxlength="14" autocomplete="off" autocapitalize="characters" placeholder="Codice della stanza"><button class="hb" data-act="mp-join">Entra</button></div>
+      <p class="msg err" id="mpErr" role="status"></p></div>
+      <button class="hb ghost" data-act="setup">Indietro</button></div>`
+    :`<div class="hm-menu"><button class="menuitem pri" data-act="start"><span><span class="mt">Inizia la partita</span></span><span class="ar" aria-hidden="true">→</span></button>
+      <button class="hb ghost" data-act="setup">Indietro</button></div>`;
+  m.innerHTML=`<canvas class="leaves" id="leaves" aria-hidden="true"></canvas>
+  <div class="hm" role="dialog" aria-modal="true" aria-labelledby="dt">
+    <h2 id="dt" class="hm-h">Nuova partita</h2>
+    <div class="hm-seg two"><button class="hb" data-ngmode="cpu" aria-pressed="${!fr}">Contro il computer</button><button class="hb" data-ngmode="amico" aria-pressed="${fr}">Con un amico</button></div>
+    <div class="hm-sec"><label class="hm-lab" for="pname">Il tuo nome</label>
+      <input id="pname" class="hm-in" type="text" maxlength="16" autocomplete="nickname" placeholder="Come ti chiami?" value="${esc(OPT.name)}"></div>
+    ${fr?amico:cpu}
     <div class="hm-sec"><div class="hm-lab">Mappa</div>
       <div class="hm-seg three">${MAPMODES.map(x=>`<button class="hb" data-map="${x.id}" aria-pressed="${MAPMODE===x.id}">${x.name}</button>`).join('')}</div>
       <figure class="prev"><img src="${PREV[MAPMODE]}" alt="Anteprima della mappa ${mm.name.toLowerCase()}" width="600" height="${MAPMODE==='reale'?287:714}"><figcaption>${mm.d}</figcaption></figure></div>
-    <div class="hm-menu">
-      <button class="menuitem pri" data-act="start"><span><span class="mt">Gioca</span></span><span class="ar" aria-hidden="true">→</span></button>
-      <button class="menuitem" data-act="mystats"><span><span class="mt">Le tue partite</span><span class="ms">${summaryLine()}</span></span><span class="ar" aria-hidden="true">→</span></button>
-      <button class="menuitem" data-act="rules"><span><span class="mt">Regolamento</span></span><span class="ar" aria-hidden="true">→</span></button>
-      ${G&&G.started&&!G.over?'<button class="hb ghost" data-act="close">Torna alla partita</button>':''}
-    </div>
-    ${G&&G.started&&!G.over&&G.actionNo?'<p class="hm-mut small jt">Se inizi una nuova partita, quella in corso viene abbandonata e non conta nel bilancio. La mappa scelta vale subito anche per la partita in corso; nome, avversari e difficoltà dalla prossima.</p>':''}
-    <p class="hm-foot">Neo-Doge è un omaggio senza scopo di lucro a The King Is Dead di Peer Sylvester. Se ti è piaciuto, compra l’originale.</p>
+    ${!fr&&G&&G.started&&!G.over&&G.actionNo?'<p class="hm-mut small jt">Se inizi una nuova partita, quella in corso viene abbandonata e non conta nel bilancio. La mappa scelta vale subito anche per la partita in corso; nome, avversari e difficoltà dalla prossima.</p>':''}
+    ${bottom}
   </div>`;
+  startLeaves();
+}
+// ---------- Partita con un amico (PeerJS, senza server proprio) ----------
+const PEER_SRC='https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
+function loadPeer(ok,ko){
+  if(window.Peer){ok();return}
+  const sc=document.createElement('script');sc.src=PEER_SRC;sc.onload=()=>window.Peer?ok():ko();sc.onerror=ko;document.head.appendChild(sc);
+}
+const mpLink=()=>{let b=location.href.split('#')[0].split('?')[0];return b+'?stanza='+MP.code};
+function genCode(){const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let c='';for(let i=0;i<5;i++)c+=A[Math.floor(Math.random()*A.length)];return c}
+function mpClose(){if(!MP)return;const q=MP;MP=null;ME=0;try{q.conn&&q.conn.close()}catch(e){}try{q.peer&&q.peer.destroy()}catch(e){}}
+function mpSend(o){try{if(MP&&MP.conn&&MP.conn.open)MP.conn.send(o)}catch(e){}}
+let mpLastEv=0;
+function mpBroadcast(){
+  if(!MP||MP.role!=='host'||!MP.conn||!MP.conn.open||!G||!G.mp)return;
+  const str=JSON.stringify(G);if(str===MP.lastS)return;MP.lastS=str;mpSend({t:'state',s:str});
+}
+function mpFail(msg){if(MP){MP.err=msg;MP.ready=false}showMP()}
+function mpHost(){
+  mpClose();MP={role:'host',code:genCode(),ready:false,friend:null,ai:0,dif:OPT.dif,err:null};ME=0;showMP();
+  loadPeer(()=>{
+    const open=()=>{
+      const q=MP;if(!q)return;
+      const peer=new window.Peer('neodoge-'+q.code,{debug:0});q.peer=peer;
+      peer.on('open',()=>{if(MP===q){q.ready=true;showMP()}});
+      peer.on('error',e=>{if(MP!==q)return;if(e&&e.type==='unavailable-id'){q.code=genCode();try{peer.destroy()}catch(x){}open();return}mpFail('Non riesco a creare la stanza. Controlla la connessione e riprova.')});
+      peer.on('connection',c=>{
+        if(MP!==q)return;
+        if(q.conn&&q.conn.open&&q.friend&&!(G&&G.mp&&!G.over)){c.close();return}
+        if(q.conn&&q.conn.open&&!(G&&G.mp&&!G.over)){c.close();return}
+        try{if(q.conn&&q.conn!==c)q.conn.close()}catch(e){}
+        q.conn=c;c.on('data',d=>mpOnMsg(d,c));c.on('close',()=>mpGone(c));c.on('error',()=>mpGone(c));
+      });
+    };open();
+  },()=>mpFail('Non riesco a caricare il servizio di collegamento. Puoi giocare contro il computer.'));
+}
+function mpJoin(raw,name){
+  let code=String(raw||'').toUpperCase().replace(/NEODOGE-/,'').replace(/[^A-Z0-9]/g,'');
+  if(!/^[A-Z0-9]{4,8}$/.test(code))return false;
+  const nm=cleanName(name)||'Amico';
+  mpClose();MP={role:'guest',code,ready:false,hostName:null,err:null,connecting:true,name:nm};ME=1;showMP();
+  const q=MP;
+  loadPeer(()=>{
+    const peer=new window.Peer(undefined,{debug:0});q.peer=peer;
+    const to=setTimeout(()=>{if(MP===q&&!q.hostName)mpFail('La stanza non risponde. Controlla il codice e che l’amico sia ancora online.')},15000);
+    peer.on('open',()=>{
+      const c=peer.connect('neodoge-'+q.code,{reliable:true,serialization:'json'});q.conn=c;
+      c.on('open',()=>{if(MP===q)mpSend({t:'hello',name:q.name})});
+      c.on('data',d=>mpOnMsg(d,c));c.on('close',()=>{clearTimeout(to);mpGone(c)});c.on('error',()=>{});
+    });
+    peer.on('error',e=>{clearTimeout(to);if(MP!==q)return;mpFail(e&&e.type==='peer-unavailable'?'Stanza non trovata. Controlla il codice: potrebbe essere stata chiusa.':'Non riesco a collegarmi. Controlla la connessione e riprova.')});
+  },()=>mpFail('Non riesco a caricare il servizio di collegamento. Puoi giocare contro il computer.'));
+  return true;
+}
+function mpGone(c){
+  if(!MP||MP.conn!==c)return;
+  if(MP.role==='host'){MP.friend=null;MP.gone=true;
+    if(G&&G.mp&&!G.over)mpNotice('L’amico si è disconnesso','Può rientrare con lo stesso link finché tieni aperta questa pagina: la partita riprende da dove era.');else showMP()}
+  else{MP.hostName=null;MP.ready=false;MP.err='Connessione persa.';
+    if(G&&G.mp&&!G.over)mpNotice('Connessione persa','Puoi riprovare a rientrare nella stanza: la partita riprende da dove era.',true);else showMP()}
+}
+function mpNotice(title,txt,retry){
+  const m=document.getElementById('modal');m.hidden=false;m.classList.add('home');
+  m.innerHTML=`<div class="hm" role="dialog" aria-modal="true" aria-labelledby="dt"><h2 id="dt" class="hm-h">${title}</h2><p class="jt">${txt}</p>
+    <div class="hm-menu">${retry?'<button class="menuitem pri" data-act="mp-retry"><span><span class="mt">Riprova</span></span><span class="ar" aria-hidden="true">→</span></button>':''}<button class="menuitem" data-act="close"><span><span class="mt">Guarda la mappa</span></span><span class="ar" aria-hidden="true">→</span></button><button class="hb ghost" data-act="mp-exit">Esci</button></div></div>`;
+}
+function mpOnMsg(d,c){
+  if(!MP||MP.conn!==c||!d||typeof d!=='object')return;
+  if(MP.role==='guest'){
+    if(d.t==='welcome'){MP.hostName=String(d.host||'').slice(0,20)||'Amico';MP.connecting=false;MP.err=null;if(!(G&&G.mp&&!G.over))showMP()}
+    else if(d.t==='state'&&typeof d.s==='string'){try{mpApply(JSON.parse(d.s))}catch(e){}}
+    return;
+  }
+  if(d.t==='hello'){
+    MP.friend=cleanName(d.name)||'Amico';MP.gone=false;mpSend({t:'welcome',host:OPT.name||'Tu'});
+    if(G&&G.mp&&!G.over){MP.lastS=null;document.getElementById('modal').hidden=true;render()}else showMP();
+    return;
+  }
+  if(!G||!G.mp||G.over)return;const seat=1;
+  if(d.t==='act'){
+    if(G.cur!==seat||G.await!=null||!G.players[seat].hand.includes(d.cid))return;
+    playAction(seat,d.cid,d.m||null);G.await=seat;render();
+  }else if(d.t==='sum'){
+    if(G.await!==seat)return;G.await=null;
+    if(d.s)doSummon(seat,d.s);else addLog('Nessun seguace da reclutare.','info',who(seat));
+    endTurn();
+  }else if(d.t==='pass'){
+    if(G.cur!==seat||G.await!=null)return;doPass(seat);
+  }
+}
+function mpApply(snap){
+  const was=G&&G.mp&&G.gid===snap.gid&&G.over;
+  const fresh=!(G&&G.gid===snap.gid&&G.mp);
+  G=snap;G.started=true;turnSeq++;
+  if(G.flash)G.flash.t=Date.now();
+  if(fresh){resetPop();mpLastEv=0;UI={phase:'idle'};const m=document.getElementById('modal');m.hidden=true;stopLeaves();setTimeout(centerMap,50)}
+  (G.ev||[]).filter(e=>e.id>mpLastEv).forEach(e=>{announce(e.kind,e.head,e.html,e.ms,e.p);mpLastEv=e.id});
+  if(G.over||G.cur!==ME)UI={phase:'idle'};
+  else if(G.await===ME){if(UI.phase!=='summon'){UI={phase:'idle'};render();startSummon()}}
+  else if(UI.phase==='wait')UI={phase:'idle'};
+  render();
+  if(G.over&&!was)whenIdle(showEnd,200);
+}
+function mpStart(){
+  if(!MP||MP.role!=='host'||!MP.friend)return;
+  mpLastEv=0;newGame(MP.ai?1:0,{names:[OPT.name||'Tu',MP.friend],ai:MP.ai,dif:MP.dif});
+  ME=0;G.started=true;MP.lastS=null;
+  document.getElementById('modal').hidden=true;stopLeaves();render();centerMap();schedule();
+}
+function showMP(){
+  const m=document.getElementById('modal');m.hidden=false;m.classList.add('home');
+  if(!MP){showNewGame();return}
+  const back='<button class="hb ghost" data-act="mp-leave">Indietro</button>';
+  let body='';
+  if(MP.err){body=`<p class="msg err" role="status" style="display:block">${MP.err}</p><div class="hm-menu">${MP.role==='guest'&&MP.code?'<button class="menuitem pri" data-act="mp-retry"><span><span class="mt">Riprova</span></span><span class="ar" aria-hidden="true">→</span></button>':''}${back}</div>`}
+  else if(MP.role==='host'){
+    const link=MP.ready?mpLink():'';
+    const wa='https://wa.me/?text='+encodeURIComponent('Giochiamo a Neo-Doge! Entra nella mia stanza: '+link);
+    const inv=MP.ready?`<div class="hm-sec"><div class="hm-lab">Codice della stanza</div><div class="mpcode">${MP.code}</div>
+      <input id="mpLink" class="hm-in" readonly value="${link}" aria-label="Link della stanza">
+      <div class="hm-row"><button class="hb" data-act="mp-copy">Copia link</button>${navigator.share?'<button class="hb" data-act="mp-share">Condividi…</button>':''}<a class="hb" href="${wa}" target="_blank" rel="noopener">WhatsApp</a></div>
+      <p class="msg" id="mpMsg" role="status"></p></div>`:'<p class="hm-mut">Creo la stanza…</p>';
+    const ready=MP.friend?`<p class="hm-st ok"><b>${esc(MP.friend)}</b> è nella stanza.</p>
+      <div class="hm-sec"><div class="hm-lab">Terzo giocatore</div>
+      <div class="hm-seg three">${[[0,'Nessuno'],['baciccia','BacicciaBot'],['rina','Sciâ Rina']].map(([v,n])=>`<button class="hb" data-mpai="${v}" aria-pressed="${String(MP.ai)===String(v)}">${n}</button>`).join('')}</div>
+      <div id="mpDifRow" ${MP.ai?'':'hidden'}><div class="hm-lab" style="margin:6px 0">Difficoltà del computer</div><div class="hm-seg three">${DIFS.map(x=>`<button class="hb" data-mpdif="${x.id}" aria-pressed="${MP.dif===x.id}">${x.name}</button>`).join('')}</div></div></div>
+      <div class="hm-menu"><button class="menuitem pri" data-act="mp-start"><span><span class="mt">Inizia la partita</span></span><span class="ar" aria-hidden="true">→</span></button>${back}</div>`
+      :`<p class="hm-st">${MP.ready?'In attesa dell’amico…':''}</p><div class="hm-menu">${back}</div>`;
+    body=inv+ready;
+  }else{
+    body=MP.hostName?`<p class="hm-st ok">Sei nella stanza di <b>${esc(MP.hostName)}</b>.</p><p class="hm-mut jt">Aspetta: la partita comincia appena la avvia lui.</p><div class="hm-menu">${back}</div>`
+      :`<p class="hm-st">Mi collego alla stanza <b>${MP.code}</b>…</p><div class="hm-menu">${back}</div>`;
+  }
+  m.innerHTML=`<canvas class="leaves" id="leaves" aria-hidden="true"></canvas><div class="hm" role="dialog" aria-modal="true" aria-labelledby="dt"><h2 id="dt" class="hm-h">${MP.role==='host'?'Stanza creata':'Entra in stanza'}</h2>${body}</div>`;
+  startLeaves();
+}
+function showInvite(code){
+  const m=document.getElementById('modal');m.hidden=false;m.classList.add('home');
+  m.innerHTML=`<canvas class="leaves" id="leaves" aria-hidden="true"></canvas><div class="hm" role="dialog" aria-modal="true" aria-labelledby="dt">
+    <h2 id="dt" class="hm-h">Sei stato invitato</h2>
+    <p class="jt">Un amico ti ha invitato in una stanza di Neo-Doge (codice <b>${esc(code)}</b>). Scegli il tuo nome ed entra.</p>
+    <div class="hm-sec"><label class="hm-lab" for="pname">Il tuo nome</label><input id="pname" class="hm-in" type="text" maxlength="16" autocomplete="nickname" placeholder="Come ti chiami?" value="${esc(OPT.name)}"></div>
+    <div class="hm-menu"><button class="menuitem pri" data-act="mp-join-invite" data-code="${esc(code)}"><span><span class="mt">Entra nella stanza</span></span><span class="ar" aria-hidden="true">→</span></button><button class="hb ghost" data-act="setup">No, grazie</button></div></div>`;
   startLeaves();
 }
 // ---------- Pioggia di basilico ----------
@@ -1377,7 +1562,7 @@ function startLeaves(){
 }
 function showEnd(){
   const o=G.over,B=G.B,m=document.getElementById('modal');m.hidden=false;m.classList.remove('home');stopLeaves();
-  const youWin=o.winners.includes(0),shared=o.winners.length>1;
+  const youWin=o.winners.includes(ME),shared=o.winners.length>1;
   const names=o.winners.map(p=>G.players[p].name).join(' e ');
   let title,intro,table,why;
   if(o.kind==='cor'){
@@ -1395,12 +1580,15 @@ function showEnd(){
     intro+=youWin&&!shared?' <b>Guidi tu la resistenza: Genova è tua.</b>':!shared?` <b>${names} guida la resistenza.</b>`:'';
   }
   if(shared)intro+=` <b>Vittoria condivisa: ${names}.</b>`;
-  const oc=G.outcome==='w'?'Vittoria':G.outcome==='s'?'Vittoria condivisa':'Sconfitta';
+  const lost=G.mp?!youWin:G.outcome==='l';
+  const oc=G.mp?(youWin?(shared?'Vittoria condivisa':'Vittoria'):'Sconfitta'):G.outcome==='w'?'Vittoria':G.outcome==='s'?'Vittoria condivisa':'Sconfitta';
+  const others=G.players.filter((x,i)=>i!==ME).map(x=>x.name).join(' e ');
+  const sub=G.mp?`Partita con un amico · contro ${others}${G.players.some(x=>x.ai)?' · difficoltà '+DIFS.find(x=>x.id===(G.dif||'spietata')).name.toLowerCase():''}`:`Difficoltà ${DIFS.find(x=>x.id===(G.dif||'spietata')).name.toLowerCase()} · contro ${others}`;
   const quote=o.kind==='cor'?`<p class="quote q${o.rank[0]}">«${DOM_QUOTES[o.rank[0]]}»</p>`:`<p class="quote qi">«${o.quote||INV_QUOTES[0]}»</p>`;
-  m.innerHTML=`<div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dt"><div class="eyebrow" style="color:${G.outcome==='l'?'var(--red)':'var(--accent)'}">${oc}</div><h2 id="dt">${title}</h2><p class="muted small" style="margin:0">Difficoltà ${DIFS.find(x=>x.id===(G.dif||'spietata')).name.toLowerCase()} · contro ${G.players.slice(1).map(p=>p.name).join(' e ')}</p>${quote}<p>${intro}</p>${table}<p class="muted">${why}</p>
+  m.innerHTML=`<div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dt"><div class="eyebrow" style="color:${lost?'var(--red)':'var(--accent)'}">${oc}</div><h2 id="dt">${title}</h2><p class="muted small" style="margin:0">${sub}</p>${quote}<p>${intro}</p>${table}<p class="muted">${why}</p>
     ${G.newMedals&&G.newMedals.length?`<div class="newmed"><div class="eyebrow" style="color:#e7b84a">${G.newMedals.length===1?'Nuova medaglia':'Nuove medaglie'}</div>${medalGrid(G.newMedals)}</div>`:''}
-    <div><div class="eyebrow" style="margin-bottom:6px">Il tuo bilancio, tutte le difficoltà</div>${statsBlock()}</div>
-    <div class="row"><button class="btn pri" data-act="setup">Nuova partita</button><button class="btn ghost" data-act="close">Guarda la mappa</button></div></div>`;
+    ${G.mp?'':`<div><div class="eyebrow" style="margin-bottom:6px">Il tuo bilancio, tutte le difficoltà</div>${statsBlock()}</div>`}
+    <div class="row">${G.mp?(MP&&MP.role==='host'?'<button class="btn pri" data-act="mp-rematch">Rivincita</button>':'')+'<button class="btn" data-act="mp-exit">Esci</button>':'<button class="btn pri" data-act="setup">Nuova partita</button>'}<button class="btn ghost" data-act="close">Guarda la mappa</button></div></div>`;
 }
 
 // ---------- Eventi ----------
@@ -1423,14 +1611,17 @@ if(typeof document!=='undefined'){
   document.getElementById('dock').addEventListener('click',e=>{
     const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
     if(a==='card')beginCard(+b.dataset.i);
-    else if(a==='pass'){if(myTurn()&&UI.phase==='idle')doPass(0)}
+    else if(a==='pass'){if(myTurn()&&UI.phase==='idle'){if(MPG()){mpSend({t:'pass'});UI={phase:'wait'};render()}else doPass(ME)}}
     else if(a==='cancel'){UI={phase:'idle'};render()}
     else if(a==='restart'){UI.moves=UI.all;UI.step=0;UI.picks={};advance();render()}
     else if(a==='opt'){pickVal(UI.opts[+b.dataset.i]);advance();render()}
-    else if(a==='noeff'){const cid=UI.cid;UI={phase:'idle'};playAction(0,cid,null);startSummon();render()}
+    else if(a==='noeff'){const cid=UI.cid;UI={phase:'idle'};humanPlay(cid,null);render()}
     else if(a==='result')showEnd();
   });
   document.getElementById('modal').addEventListener('click',e=>{
+    const ng=e.target.closest('[data-ngmode]');if(ng){NGMODE=ng.dataset.ngmode;showNewGame();return}
+    const mpa=e.target.closest('[data-mpai]');if(mpa&&MP){MP.ai=mpa.dataset.mpai==='0'?0:mpa.dataset.mpai;updateSeg('mpai',mpa);const r=document.getElementById('mpDifRow');if(r)r.hidden=!MP.ai;return}
+    const mpd=e.target.closest('[data-mpdif]');if(mpd&&MP){MP.dif=mpd.dataset.mpdif;updateSeg('mpdif',mpd);return}
     const ai=e.target.closest('[data-ai]');if(ai){OPT.ai=+ai.dataset.ai;saveOpt();updateSeg('ai',ai);syncOppRow();return}
     const op=e.target.closest('[data-opp]');if(op){OPT.opp=op.dataset.opp;saveOpt();updateSeg('opp',op);return}
     const df=e.target.closest('[data-dif]');if(df){OPT.dif=df.dataset.dif;saveOpt();updateSeg('dif',df);document.getElementById('difCap').textContent=DIFS.find(x=>x.id===OPT.dif).d;return}
@@ -1440,6 +1631,7 @@ if(typeof document!=='undefined'){
     const tl=e.target.closest('.toc a');if(tl){e.preventDefault();document.getElementById(tl.getAttribute('href').slice(1))?.scrollIntoView({behavior:'smooth',block:'start'});return}
     const b=e.target.closest('[data-act]');if(!b)return;const a=b.dataset.act;
     if(a==='rules'){showRules();return}
+    if(a==='play'){showNewGame();m0().scrollTop=0;return}
     if(a==='rclose'){closeRules();return}
     if(a==='mystats'){stConfirm=false;showStats();m0().scrollTop=0;return}
     if(a==='sclose'){stConfirm=false;showSetup();return}
@@ -1456,6 +1648,18 @@ if(typeof document!=='undefined'){
       STATS=r.s;saveStats();if(r.hasM){MEDS=r.m;saveMedals()}
       ['ai','opp','dif','name'].forEach(k=>{if(k in r.o)OPT[k]=r.o[k]});saveOpt();if(r.o.map)setMapMode(r.o.map);if(G)renderRec();
       const y=m0().scrollTop;showStats();m0().scrollTop=y;const m2=document.getElementById('loadMsg');m2.className='msg ok';m2.textContent='Fatto: statistiche, medaglie e opzioni ripristinate.';return}
+    if(a==='mp-create'){NGMODE='amico';mpHost();return}
+    if(a==='mp-join'){const inp=document.getElementById('mpcode');if(!mpJoin(inp&&inp.value,OPT.name)){const er=document.getElementById('mpErr');if(er)er.textContent='Codice non valido: sono 5 tra lettere e numeri.'}return}
+    if(a==='mp-join-invite'){const code=b.dataset.code;try{history.replaceState(null,'',location.pathname)}catch(err){}if(!mpJoin(code,OPT.name))showNewGame();return}
+    if(a==='mp-retry'){if(MP&&MP.role==='guest'){const c=MP.code,n=MP.name||OPT.name;mpJoin(c,n)}return}
+    if(a==='mp-start'){mpStart();return}
+    if(a==='mp-rematch'){mpStart();return}
+    if(a==='mp-leave'){mpClose();NGMODE='amico';showNewGame();return}
+    if(a==='mp-exit'){mpClose();newGame(OPT.ai);render();showSetup();return}
+    if(a==='mp-copy'){const inp=document.getElementById('mpLink'),msg=document.getElementById('mpMsg');
+      const fail=()=>{inp.focus();inp.select();msg.className='msg err';msg.textContent='Copia non disponibile qui: il link è selezionato, copialo a mano.'};
+      try{navigator.clipboard.writeText(inp.value).then(()=>{msg.className='msg ok';msg.textContent='Link copiato. Mandalo al tuo amico.'},fail)}catch(err){fail()}return}
+    if(a==='mp-share'){try{navigator.share({title:'Neo-Doge',text:'Giochiamo a Neo-Doge! Entra nella mia stanza:',url:mpLink()}).catch(()=>{})}catch(err){}return}
     if(a==='start'){document.getElementById('modal').hidden=true;newGame(OPT.ai);G.started=true;render();centerMap();schedule()}
     else if(a==='close')document.getElementById('modal').hidden=true;
     else if(a==='setup')showSetup();
@@ -1476,6 +1680,7 @@ if(typeof document!=='undefined'){
     if(g&&g.B&&!g.over){G=g;G.started=true;UI={phase:'idle'};render();schedule()}
     else{newGame(OPT.ai);render();showSetup()}
     centerMap();
+    try{const q=new URLSearchParams(location.search).get('stanza');if(q&&/^[A-Za-z0-9-]{4,14}$/.test(q))showInvite(q.toUpperCase().replace('NEODOGE-',''))}catch(e){}
   };
   try{window.claude?.hot?.ready?window.claude.hot.ready(start):start(window.claude?.hot?.data??{})}catch(e){start({})}
 }
