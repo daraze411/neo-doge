@@ -1382,11 +1382,12 @@ function showNewGame(){
 const PEER_SRC='https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
 function loadPeer(ok,ko){
   if(window.Peer){ok();return}
-  const sc=document.createElement('script');sc.src=PEER_SRC;sc.onload=()=>window.Peer?ok():ko();sc.onerror=ko;document.head.appendChild(sc);
+  let done=false;const end=f=>{if(done)return;done=true;clearTimeout(t);f()};const t=setTimeout(()=>end(()=>ko('timeout')),10000);
+  const sc=document.createElement('script');sc.src=PEER_SRC;sc.onload=()=>end(()=>window.Peer?ok():ko('vuoto'));sc.onerror=()=>end(()=>ko('bloccato'));document.head.appendChild(sc);
 }
 const mpLink=()=>{let b=location.href.split('#')[0].split('?')[0];return b+'?stanza='+MP.code};
 function genCode(){const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let c='';for(let i=0;i<5;i++)c+=A[Math.floor(Math.random()*A.length)];return c}
-function mpClose(){if(!MP)return;const q=MP;MP=null;ME=0;try{q.conn&&q.conn.close()}catch(e){}try{q.peer&&q.peer.destroy()}catch(e){}}
+function mpClose(){if(!MP)return;const q=MP;MP=null;ME=0;try{q.lock&&q.lock.release()}catch(e){}try{q.conn&&q.conn.close()}catch(e){}try{q.peer&&q.peer.destroy()}catch(e){}}
 function mpSend(o){try{if(MP&&MP.conn&&MP.conn.open)MP.conn.send(o)}catch(e){}}
 let mpLastEv=0;
 function mpBroadcast(){
@@ -1395,40 +1396,67 @@ function mpBroadcast(){
 }
 function mpFail(msg){if(MP){MP.err=msg;MP.ready=false}showMP()}
 function mpHost(){
-  mpClose();MP={role:'host',code:genCode(),ready:false,friend:null,ai:0,dif:OPT.dif,err:null};ME=0;showMP();
+  mpClose();MP={role:'host',code:genCode(),ready:false,friend:null,ai:0,dif:OPT.dif,err:null};ME=0;showMP();mpWake();
   loadPeer(()=>{
-    const open=()=>{
-      const q=MP;if(!q)return;
-      const peer=new window.Peer('neodoge-'+q.code,{debug:0});q.peer=peer;
-      peer.on('open',()=>{if(MP===q){q.ready=true;showMP()}});
-      peer.on('error',e=>{if(MP!==q)return;if(e&&e.type==='unavailable-id'){q.code=genCode();try{peer.destroy()}catch(x){}open();return}mpFail('Non riesco a creare la stanza. Controlla la connessione e riprova.')});
+    const open=(tries)=>{
+      const q=MP;if(!q)return;tries=tries||0;
+      let peer;try{peer=new window.Peer('neodoge-'+q.code,{debug:0})}catch(x){mpFail('Non riesco a creare la stanza (errore: '+(x&&x.message||x)+').');return}
+      q.peer=peer;q.open=open;
+      const to=setTimeout(()=>{if(MP===q&&!q.ready)mpFail('Il servizio di collegamento non risponde (nessuna risposta dopo 12 secondi). Può essere bloccato dalla rete o dal browser.')},12000);
+      peer.on('open',()=>{clearTimeout(to);if(MP===q&&q.peer===peer){q.ready=true;q.err=null;showMP()}});
+      // se il telefono sospende la pagina (es. mentre condividi il link) il collegamento al servizio cade: lo riapriamo con lo stesso codice
+      peer.on('disconnected',()=>{if(MP!==q||q.peer!==peer)return;
+        if(!q.ready){clearTimeout(to);mpFail('Il servizio di collegamento non è raggiungibile.');return}
+        setTimeout(()=>{try{if(MP===q&&q.peer===peer&&peer.disconnected&&!peer.destroyed)peer.reconnect()}catch(e){}},1200)});
+      peer.on('close',()=>{if(MP===q&&q.peer===peer&&q.ready)setTimeout(()=>{if(MP===q)open(0)},1500)});
+      peer.on('error',e=>{if(MP!==q||q.peer!==peer)return;const ty=e&&e.type;
+        if(ty==='unavailable-id'){clearTimeout(to);
+          if(q.ready){if(tries<10){try{peer.destroy()}catch(x){}setTimeout(()=>{if(MP===q)open(tries+1)},2000)}return}
+          q.code=genCode();try{peer.destroy()}catch(x){}open(0);return}
+        if(q.ready){if(ty==='network'||ty==='server-error'||ty==='socket-error'||ty==='socket-closed')setTimeout(()=>{try{if(MP===q&&peer.disconnected&&!peer.destroyed)peer.reconnect()}catch(x){}},2000);return}
+        clearTimeout(to);mpFail('Non riesco a creare la stanza (errore: '+(ty||e)+'). Controlla la connessione e riprova.')});
       peer.on('connection',c=>{
         if(MP!==q)return;
-        if(q.conn&&q.conn.open&&q.friend&&!(G&&G.mp&&!G.over)){c.close();return}
         if(q.conn&&q.conn.open&&!(G&&G.mp&&!G.over)){c.close();return}
         try{if(q.conn&&q.conn!==c)q.conn.close()}catch(e){}
         q.conn=c;c.on('data',d=>mpOnMsg(d,c));c.on('close',()=>mpGone(c));c.on('error',()=>mpGone(c));
       });
-    };open();
-  },()=>mpFail('Non riesco a caricare il servizio di collegamento. Puoi giocare contro il computer.'));
+    };open(0);
+  },why=>mpFail('Non riesco a caricare il servizio di collegamento ('+why+'). Su alcune pagine, come l’anteprima dentro Claude, è bloccato: prova dal sito su GitHub. Intanto puoi giocare contro il computer.'));
 }
 function mpJoin(raw,name){
   let code=String(raw||'').toUpperCase().replace(/NEODOGE-/,'').replace(/[^A-Z0-9]/g,'');
   if(!/^[A-Z0-9]{4,8}$/.test(code))return false;
   const nm=cleanName(name)||'Amico';
-  mpClose();MP={role:'guest',code,ready:false,hostName:null,err:null,connecting:true,name:nm};ME=1;showMP();
+  mpClose();MP={role:'guest',code,ready:false,hostName:null,err:null,connecting:true,name:nm,tries:0};ME=1;showMP();mpWake();
   const q=MP;
-  loadPeer(()=>{
-    const peer=new window.Peer(undefined,{debug:0});q.peer=peer;
-    const to=setTimeout(()=>{if(MP===q&&!q.hostName)mpFail('La stanza non risponde. Controlla il codice e che l’amico sia ancora online.')},15000);
+  const go=()=>{
+    if(MP!==q)return;
+    try{q.peer&&q.peer.destroy()}catch(e){}
+    let peer;try{peer=new window.Peer(undefined,{debug:0})}catch(x){mpFail('Non riesco a collegarmi (errore: '+(x&&x.message||x)+').');return}
+    q.peer=peer;
+    const to=setTimeout(()=>{if(MP===q&&q.peer===peer&&!q.hostName)mpFail('La stanza non risponde. Controlla il codice e che l’amico tenga aperta la pagina.')},15000);
     peer.on('open',()=>{
       const c=peer.connect('neodoge-'+q.code,{reliable:true,serialization:'json'});q.conn=c;
       c.on('open',()=>{if(MP===q)mpSend({t:'hello',name:q.name})});
       c.on('data',d=>mpOnMsg(d,c));c.on('close',()=>{clearTimeout(to);mpGone(c)});c.on('error',()=>{});
     });
-    peer.on('error',e=>{clearTimeout(to);if(MP!==q)return;mpFail(e&&e.type==='peer-unavailable'?'Stanza non trovata. Controlla il codice: potrebbe essere stata chiusa.':'Non riesco a collegarmi. Controlla la connessione e riprova.')});
-  },()=>mpFail('Non riesco a caricare il servizio di collegamento. Puoi giocare contro il computer.'));
+    peer.on('error',e=>{clearTimeout(to);if(MP!==q||q.peer!==peer)return;
+      // la stanza può essere momentaneamente irraggiungibile (l'amico sta tornando sulla pagina): riprovo per un po'
+      if(e&&e.type==='peer-unavailable'&&q.tries<15){q.tries++;setTimeout(go,3000);return}
+      mpFail(e&&e.type==='peer-unavailable'?'Stanza non trovata. Controlla il codice: potrebbe essere stata chiusa, oppure l’amico ha la pagina sospesa. Digli di riaprirla e riprova.':'Non riesco a collegarmi (errore: '+(e&&e.type||e)+'). Controlla la connessione e riprova.')});
+  };
+  loadPeer(go,why=>mpFail('Non riesco a caricare il servizio di collegamento ('+why+'). Prova dal sito su GitHub.'));
   return true;
+}
+async function mpWake(){try{if(navigator.wakeLock&&MP&&document.visibilityState==='visible'&&!(MP.lock&&!MP.lock.released))MP.lock=await navigator.wakeLock.request('screen')}catch(e){}}
+if(typeof document!=='undefined'){
+  const back=()=>{
+    if(document.visibilityState!=='visible'||!MP)return;mpWake();
+    if(MP.role==='host'&&MP.peer&&MP.ready){if(MP.peer.destroyed)MP.open&&MP.open(0);else if(MP.peer.disconnected)try{MP.peer.reconnect()}catch(e){}}
+    else if(MP.role==='guest'&&MP.code&&(!MP.conn||!MP.conn.open)&&!MP.connecting){mpJoin(MP.code,MP.name)}
+  };
+  document.addEventListener('visibilitychange',back);window.addEventListener('online',back);window.addEventListener('pageshow',back);
 }
 function mpGone(c){
   if(!MP||MP.conn!==c)return;
@@ -1497,7 +1525,7 @@ function showMP(){
     const inv=MP.ready?`<div class="hm-sec"><div class="hm-lab">Codice della stanza</div><div class="mpcode">${MP.code}</div>
       <input id="mpLink" class="hm-in" readonly value="${link}" aria-label="Link della stanza">
       <div class="hm-row"><button class="hb" data-act="mp-copy">Copia link</button>${navigator.share?'<button class="hb" data-act="mp-share">Condividi…</button>':''}<a class="hb" href="${wa}" target="_blank" rel="noopener">WhatsApp</a></div>
-      <p class="msg" id="mpMsg" role="status"></p></div>`:'<p class="hm-mut">Creo la stanza…</p>';
+      <p class="msg" id="mpMsg" role="status"></p><p class="hm-mut small jt">Dopo aver mandato il link, torna qui e tieni aperta questa pagina finché l’amico entra.</p></div>`:'<p class="hm-mut">Creo la stanza…</p>';
     const ready=MP.friend?`<p class="hm-st ok"><b>${esc(MP.friend)}</b> è nella stanza.</p>
       <div class="hm-sec"><div class="hm-lab">Terzo giocatore</div>
       <div class="hm-seg three">${[[0,'Nessuno'],['baciccia','BacicciaBot'],['rina','Sciâ Rina']].map(([v,n])=>`<button class="hb" data-mpai="${v}" aria-pressed="${String(MP.ai)===String(v)}">${n}</button>`).join('')}</div>
