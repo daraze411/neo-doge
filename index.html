@@ -232,6 +232,10 @@ summary{font-family:var(--cond);font-weight:600;font-size:16px;letter-spacing:.0
 .hm-in{font:inherit;font-size:16px;padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--fg);width:100%}
 .hm-in:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .menuitem{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 14px;border-radius:10px;background:var(--panel);border:1px solid var(--line);cursor:pointer}
+.jt{text-align:justify;hyphens:auto;-webkit-hyphens:auto}
+.hm-menu{display:grid;gap:8px}.hm-menu .hb.ghost{justify-self:center}
+.menuitem.pri{background:var(--accent);border-color:var(--accent);color:#04121c}.menuitem.pri .ar{color:#04121c}
+.hm-foot{font-family:var(--cond);font-weight:600;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:center;line-height:1.5;margin-top:6px;padding-bottom:12px}
 .menuitem:hover{border-color:var(--muted)}
 .menuitem .mt{font-family:var(--cond);font-weight:600;font-size:17px;letter-spacing:.04em;text-transform:uppercase}
 .menuitem .ms{display:block;font-size:13.5px;color:var(--muted);margin-top:2px}
@@ -1311,8 +1315,8 @@ function showSetup(){
   <div class="hm" role="dialog" aria-modal="true" aria-labelledby="dt">
     <div class="flagban" aria-hidden="false"><span class="fv"></span><h2 id="dt" class="fh">Neo-Doge</h2></div>
     <p class="hm-tag">Genova 2147 · il trono è vuoto</p>
-    <p>Il Neo-Doge è morto. La Superba è divisa: Sudamericani, Nativi Liguri e Camalli si contendono otto quartieri, ma nessuna fazione è abbastanza forte da prendersi il trono da sola.</p>
-    <p class="hm-mut">Non hai un esercito. Hai otto mosse e una corte di seguaci: fai vincere la fazione giusta e diventa il suo candidato.</p>
+    <p class="jt">Il Neo-Doge è morto. La Superba è divisa: Sudamericani, Nativi Liguri e Camalli si contendono otto quartieri, ma nessuna fazione è abbastanza forte da prendersi il trono da sola.</p>
+    <p class="hm-mut jt">Non hai un esercito. Hai otto mosse e una corte di seguaci: fai vincere la fazione giusta e diventa il suo candidato.</p>
     <div class="hm-sec"><label class="hm-lab" for="pname">Il tuo nome</label>
       <input id="pname" class="hm-in" type="text" maxlength="16" autocomplete="nickname" placeholder="Come ti chiami?" value="${esc(OPT.name)}"></div>
     <div class="hm-sec"><div class="hm-lab">Avversari</div>
@@ -1325,9 +1329,14 @@ function showSetup(){
     <div class="hm-sec"><div class="hm-lab">Mappa</div>
       <div class="hm-seg three">${MAPMODES.map(x=>`<button class="hb" data-map="${x.id}" aria-pressed="${MAPMODE===x.id}">${x.name}</button>`).join('')}</div>
       <figure class="prev"><img src="${PREV[MAPMODE]}" alt="Anteprima della mappa ${mm.name.toLowerCase()}" width="600" height="${MAPMODE==='reale'?287:714}"><figcaption>${mm.d}</figcaption></figure></div>
-    <div class="hm-row"><button class="hb pri" data-act="start">Inizia</button><button class="hb" data-act="rules">Regolamento</button>${G&&G.started&&!G.over?'<button class="hb ghost" data-act="close">Torna alla partita</button>':''}</div>
-    ${G&&G.started&&!G.over&&G.actionNo?'<p class="hm-mut small">Se inizi una nuova partita, quella in corso viene abbandonata e non conta nel bilancio. La mappa scelta vale subito anche per la partita in corso; nome, avversari e difficoltà dalla prossima.</p>':''}
-    <button class="menuitem" data-act="mystats"><span><span class="mt">Le tue partite</span><span class="ms">${summaryLine()}</span></span><span class="ar" aria-hidden="true">→</span></button>
+    <div class="hm-menu">
+      <button class="menuitem pri" data-act="start"><span><span class="mt">Gioca</span></span><span class="ar" aria-hidden="true">→</span></button>
+      <button class="menuitem" data-act="mystats"><span><span class="mt">Le tue partite</span><span class="ms">${summaryLine()}</span></span><span class="ar" aria-hidden="true">→</span></button>
+      <button class="menuitem" data-act="rules"><span><span class="mt">Regolamento</span></span><span class="ar" aria-hidden="true">→</span></button>
+      ${G&&G.started&&!G.over?'<button class="hb ghost" data-act="close">Torna alla partita</button>':''}
+    </div>
+    ${G&&G.started&&!G.over&&G.actionNo?'<p class="hm-mut small jt">Se inizi una nuova partita, quella in corso viene abbandonata e non conta nel bilancio. La mappa scelta vale subito anche per la partita in corso; nome, avversari e difficoltà dalla prossima.</p>':''}
+    <p class="hm-foot">Neo-Doge è un omaggio senza scopo di lucro a The King Is Dead di Peer Sylvester. Se ti è piaciuto, compra l’originale.</p>
   </div>`;
   startLeaves();
 }
@@ -1471,6 +1480,3 @@ if(typeof document!=='undefined'){
   try{window.claude?.hot?.ready?window.claude.hot.ready(start):start(window.claude?.hot?.data??{})}catch(e){start({})}
 }
 </script>
-
-</body>
-</html>
