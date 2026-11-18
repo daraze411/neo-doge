@@ -231,6 +231,7 @@ summary{font-family:var(--cond);font-weight:600;font-size:16px;letter-spacing:.0
 .menuitem{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 14px;border-radius:10px;background:var(--panel);border:1px solid var(--line);cursor:pointer}
 .jt{text-align:justify;hyphens:auto;-webkit-hyphens:auto}
 .hm-h{font-family:var(--cond);font-weight:700;font-size:30px;letter-spacing:.06em;text-transform:uppercase;margin:0;text-align:center}
+.hb[disabled]{opacity:.4;cursor:not-allowed;filter:grayscale(1)}.soon{display:block;font-size:10px;letter-spacing:.12em;margin-top:2px;opacity:.9}
 .hm-seg.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.hm-seg.two .hb{padding-inline:6px}
 .mpcode{font-family:var(--cond);font-weight:700;font-size:44px;letter-spacing:.3em;text-align:center;color:var(--accent);padding-left:.3em}
 .hm-st{color:var(--muted);text-align:center;margin:0}.hm-st.ok{color:var(--li)}
@@ -1347,7 +1348,7 @@ function showSetup(){
 let NGMODE='cpu';
 function showNewGame(){
   const m=document.getElementById('modal');m.hidden=false;m.classList.add('home');
-  const mm=MAPMODES.find(x=>x.id===MAPMODE),fr=NGMODE==='amico';
+  NGMODE='cpu';const mm=MAPMODES.find(x=>x.id===MAPMODE),fr=false;
   const cpu=`<div class="hm-sec"><div class="hm-lab">Avversari</div>
       <div class="hm-seg"><button class="hb" data-ai="1" aria-pressed="${OPT.ai===1}">1 avversario</button><button class="hb" data-ai="2" aria-pressed="${OPT.ai===2}">2 avversari</button></div>
       <div class="hm-seg three" id="oppRow" ${OPT.ai===1?'':'hidden'}>${OPPS.map(x=>`<button class="hb" data-opp="${x.id}" aria-pressed="${OPT.opp===x.id}">${x.name}</button>`).join('')}</div>
@@ -1366,7 +1367,7 @@ function showNewGame(){
   m.innerHTML=`<canvas class="leaves" id="leaves" aria-hidden="true"></canvas>
   <div class="hm" role="dialog" aria-modal="true" aria-labelledby="dt">
     <h2 id="dt" class="hm-h">Nuova partita</h2>
-    <div class="hm-seg two"><button class="hb" data-ngmode="cpu" aria-pressed="${!fr}">Contro il computer</button><button class="hb" data-ngmode="amico" aria-pressed="${fr}">Con un amico</button></div>
+    <div class="hm-seg two"><button class="hb" data-ngmode="cpu" aria-pressed="${!fr}">Contro il computer</button><button class="hb" data-ngmode="amico" disabled aria-disabled="true" title="In arrivo">Con un amico<small class="soon">in arrivo</small></button></div>
     <div class="hm-sec"><label class="hm-lab" for="pname">Il tuo nome</label>
       <input id="pname" class="hm-in" type="text" maxlength="16" autocomplete="nickname" placeholder="Come ti chiami?" value="${esc(OPT.name)}"></div>
     ${fr?amico:cpu}
@@ -1704,7 +1705,7 @@ if(typeof document!=='undefined'){
     if(g&&g.B&&!g.over){G=g;G.started=true;UI={phase:'idle'};render();showSetup()}
     else{newGame(OPT.ai);render();showSetup()}
     centerMap();
-    try{const q=new URLSearchParams(location.search).get('stanza');if(q&&/^[A-Za-z0-9-]{4,14}$/.test(q))showInvite(q.toUpperCase().replace('NEODOGE-',''))}catch(e){}
+    
   };
   try{window.claude?.hot?.ready?window.claude.hot.ready(start):start(window.claude?.hot?.data??{})}catch(e){start({})}
 }
