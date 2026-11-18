@@ -324,7 +324,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
     <div class="topacts">
       <span class="rec" id="rec" title="Vittorie e sconfitte"></span>
       <button class="btn ghost" id="rulesBtn">Regole</button>
-      <button class="btn ghost" id="menuBtn">Nuova partita</button>
+      <button class="btn ghost" id="menuBtn">Home</button>
     </div>
   </header>
 
@@ -1685,7 +1685,7 @@ if(typeof document!=='undefined'){
       try{navigator.clipboard.writeText(inp.value).then(()=>{msg.className='msg ok';msg.textContent='Link copiato. Mandalo al tuo amico.'},fail)}catch(err){fail()}return}
     if(a==='mp-share'){try{navigator.share({title:'Neo-Doge',text:'Giochiamo a Neo-Doge! Entra nella mia stanza:',url:mpLink()}).catch(()=>{})}catch(err){}return}
     if(a==='start'){document.getElementById('modal').hidden=true;newGame(OPT.ai);G.started=true;render();centerMap();schedule()}
-    else if(a==='close')document.getElementById('modal').hidden=true;
+    else if(a==='close'){document.getElementById('modal').hidden=true;stopLeaves();if(G&&G.started&&!G.over&&!MPG())schedule()}
     else if(a==='setup')showSetup();
   });
   document.getElementById('menuBtn').addEventListener('click',()=>{resetArmed=false;showSetup()});
@@ -1701,7 +1701,7 @@ if(typeof document!=='undefined'){
   const start=d=>{
     let g=d&&d.G;
     if(!g){try{g=JSON.parse(localStorage.getItem('neodoge.v1')||'null')}catch(e){g=null}}
-    if(g&&g.B&&!g.over){G=g;G.started=true;UI={phase:'idle'};render();schedule()}
+    if(g&&g.B&&!g.over){G=g;G.started=true;UI={phase:'idle'};render();showSetup()}
     else{newGame(OPT.ai);render();showSetup()}
     centerMap();
     try{const q=new URLSearchParams(location.search).get('stanza');if(q&&/^[A-Za-z0-9-]{4,14}$/.test(q))showInvite(q.toUpperCase().replace('NEODOGE-',''))}catch(e){}
