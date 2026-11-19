@@ -53,6 +53,12 @@ button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);ou
 .eyebrow{font-family:var(--cond);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 .status .big{font-family:var(--cond);font-weight:600;font-size:19px;line-height:1.2;text-wrap:balance}
 .status .big.alarm{color:var(--red)}
+.cstrip{display:grid;grid-template-columns:repeat(var(--n,2),minmax(0,1fr));gap:6px;margin-top:4px}
+.cs{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:3px 7px 4px;min-width:0;display:grid;gap:0}
+.cs.cur{border-color:var(--accent)}.cs.me .nm{color:var(--fg)}
+.cs .nm{font-family:var(--cond);font-weight:600;font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cs .ct{display:flex;gap:7px;flex-wrap:nowrap;font-family:var(--display);font-size:18px;line-height:1.15;font-variant-numeric:tabular-nums}
+.cs .ct span{display:inline-flex;align-items:center;gap:3px}
 .ticker{font-size:14px;color:var(--fg);min-height:1.45em}
 .mapwrap{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .cb{fill:rgba(9,18,28,.92);stroke:#4a6987;stroke-width:6}
@@ -1116,7 +1122,8 @@ function renderInfo(){
   let head;
   if(G.over)head=`<div class="big">${G.over.kind==='inv'?'Invasione dei Piemontesi':'Elezione del Neo-Doge'}</div>`;
   else head=`<div class="eyebrow">Prossima resa dei conti · passaggi di fila ${G.passes}/${n}</div><div class="big ${fc.alarm?'alarm':''}">${R[fc.r].name}: ${fc.txt}</div>`;
-  document.getElementById('status').innerHTML=head+`<div class="ticker" aria-live="polite">${loc(G.log[0]||'')}</div>`;
+  const strip=`<div class="cstrip" style="--n:${n}" aria-label="Seguaci reclutati da ciascuna corte">${G.players.map((pl,i)=>`<div class="cs${i===ME?' me':''}${i===G.cur&&!G.over?' cur':''}"><div class="nm">${i===ME?'Tu':pl.name}</div><div class="ct">${[0,1,2].map(f=>`<span title="${F[f].name}">${shp(f)}${B.court[i][f]}</span>`).join('')}</div></div>`).join('')}</div>`;
+  document.getElementById('status').innerHTML=head+strip+`<div class="ticker" aria-live="polite">${loc(G.log[0]||'')}</div>`;
   document.getElementById('players').innerHTML=G.players.map((pl,i)=>{
     const lastC=pl.played.length?CARD[pl.played[pl.played.length-1]].name:null;
     return`<div class="pl ${i===G.cur&&!G.over?'cur':''}"><div class="pn">${pl.name}${pl.ai?' <span class="tag">IA</span>':''}</div>
