@@ -275,7 +275,8 @@ a.hb{text-decoration:none;display:inline-block;text-align:center}
 .btn.danger{border-color:var(--red);color:var(--red)}
 .btn.dangerfill{background:var(--red);border-color:var(--red);color:#fff}
 a.btn{text-decoration:none;display:inline-flex;align-items:center}
-.flyer{filter:drop-shadow(0 0 4px rgba(255,255,255,.75))}
+#flyov{position:fixed;inset:0;pointer-events:none;z-index:60;overflow:hidden}
+.flyc{position:fixed;left:0;top:0;width:26px;height:26px;filter:drop-shadow(0 0 5px rgba(255,255,255,.85));will-change:transform}
 .quote{font-family:var(--display);font-weight:800;font-size:clamp(26px,7.5vw,38px);line-height:1.02;text-transform:uppercase;letter-spacing:.02em;text-wrap:balance;margin:0}
 .quote.q0{color:var(--su)}.quote.q1{color:var(--li)}.quote.q2{color:var(--ca)}
 .quote.qi{color:var(--red);font-size:clamp(22px,6vw,30px);text-transform:none;letter-spacing:0;line-height:1.12}
@@ -694,7 +695,8 @@ function aiDecide(G,p,level){
   if(!hand.length)return best;
   const cands=T>0?[best]:null;
   const remaining=B.order.filter(o=>o.up).length;
-  const cost=.04*Math.min(2,Math.max(.3,remaining/hand.length));
+  // ogni carta tenuta vale: senza questo costo i bot giocavano tutta la mano prima della prima resa dei conti
+  const cost=(n===2?.08:.14)*Math.min(2,Math.max(.3,remaining/hand.length));
   for(const cid of new Set(hand)){
     let moves=genMoves(B,cid,p,G.last);if(!moves.length)moves=[null];
     for(const m of moves){
@@ -710,9 +712,14 @@ function aiDecide(G,p,level){
     const keys=[...new Set(cands.map(c=>c.type==='pass'?'pass':c.cid))],k=keys[Math.floor(Math.random()*keys.length)];
     const pool=cands.filter(c=>(c.type==='pass'?'pass':c.cid)===k);return pool[Math.floor(Math.random()*pool.length)];
   }
-  let tot=0;const w=cands.map(c=>{const x=Math.exp((c.v-best.v)/T);tot+=x;return x});
-  let r=Math.random()*tot;for(let i=0;i<cands.length;i++){r-=w[i];if(r<=0)return cands[i]}
-  return best;
+  // scelta in due tempi: prima la carta (o il passo) in base alla sua variante migliore, poi la variante.
+  // Così le tante varianti di gioco non "soffocano" il passo e i bot non bruciano la mano.
+  const grp=new Map();for(const c of cands){const k=c.type==='pass'?'pass':c.cid;if(!grp.has(k))grp.set(k,[]);grp.get(k).push(c)}
+  const soft=list=>{const top=Math.max(...list.map(c=>c.v));let tot=0;const w=list.map(c=>{const x=Math.exp((c.v-top)/T);tot+=x;return x});
+    let r=Math.random()*tot;for(let i=0;i<list.length;i++){r-=w[i];if(r<=0)return list[i]}return list[0]};
+  const groups=[...grp.values()],heads=groups.map(g=>g.reduce((a,b)=>b.v>a.v?b:a));
+  const h=soft(heads),g=groups[heads.indexOf(h)];
+  return soft(g);
 }
 
 // ---------- Stato partita ----------
@@ -741,8 +748,8 @@ function newGame(nAI,mp){
   UI={phase:'idle'};
   resetPop();addLog(`La partita comincia. ${T(G.cur,'Inizi <b>tu</b>.','Inizia <b>$n</b>.')}`,'start','Nuova partita');
 }
-function addLog(html,kind,head,ms,p){G.log.unshift(html);if(G.log.length>80)G.log.pop();
-  if(kind){const ev={id:(G.evn=(G.evn||0)+1),kind,head,html,ms,p};(G.ev=G.ev||[]).push(ev);if(G.ev.length>30)G.ev.shift();announce(kind,head,html,ms,p)}}
+function addLog(html,kind,head,ms,p,fl){G.log.unshift(html);if(G.log.length>80)G.log.pop();
+  if(kind){const ev={id:(G.evn=(G.evn||0)+1),kind,head,html,ms,p,fl};(G.ev=G.ev||[]).push(ev);if(G.ev.length>30)G.ev.shift();announce(kind,head,html,ms,p,fl)}}
 // ---------- Animazioni dei seguaci ----------
 let pendingFly=null;
 const SUP_PT0={x:1397,y:64},SUP_PTC={x:393,y:37};
@@ -781,28 +788,35 @@ function regPt(r,f){if(COMPACT){const h=HOME.includes(r)?CHH:CH;return{x:CMARK[r
 const courtPt=p=>COMPACT?(p===ME?{x:210,y:570}:{x:210,y:-30}):(p===ME?{x:726,y:730}:{x:726,y:-40});
 function flightsFor(cid,m){
   if(!m)return[];const t=CARD[cid].t,o=[];
-  if(t==='sup')for(let i=0;i<m.n;i++)o.push({f:m.f,from:SUP_PT,to:regPt(m.r,m.f)});
-  else if(t==='adu')[m.a0,m.a1,m.a2].forEach((r,f)=>{if(r!==null)o.push({f,from:SUP_PT,to:regPt(r,f)})});
-  else if(t==='man'){o.push({f:m.fa,from:regPt(m.a,m.fa),to:regPt(m.b,m.fa)},{f:m.fb,from:regPt(m.b,m.fb),to:regPt(m.a,m.fb)})}
-  else if(t==='con'){o.push({f:m.fa,from:regPt(m.a,m.fa),to:regPt(m.b,m.fa)});m.pr.forEach(g=>o.push({f:g,from:regPt(m.b,g),to:regPt(m.a,g)}))}
+  if(t==='sup')for(let i=0;i<m.n;i++)o.push({f:m.f,a:{s:1},b:{r:m.r}});
+  else if(t==='adu')[m.a0,m.a1,m.a2].forEach((r,f)=>{if(r!==null)o.push({f,a:{s:1},b:{r}})});
+  else if(t==='man')o.push({f:m.fa,a:{r:m.a},b:{r:m.b}},{f:m.fb,a:{r:m.b},b:{r:m.a}});
+  else if(t==='con'){o.push({f:m.fa,a:{r:m.a},b:{r:m.b}});m.pr.forEach(g=>o.push({f:g,a:{r:m.b},b:{r:m.a}}))}
   return o;
 }
-function queueFly(list){/* animazioni dei cubetti disattivate */}
-function runFly(){
-  if(!pendingFly)return;const list=pendingFly;pendingFly=null;
+// ---- animazione dei cubetti: parte quando il popup della mossa si chiude ----
+const MAPGEO={reale:['map',MARK],compressa:['mapp',PMARK],onirica:['mapc',CMARK]};
+function visible(el){const r=el.getBoundingClientRect();return r.width>0&&r.height>0}
+function flyPt(x){
+  try{
+    if(x.c!==undefined){const el=document.querySelectorAll('#status .cs')[x.c];if(el){const r=(el.querySelector('.ct')||el).getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2}}return null}
+    if(x.s){const el=[...document.querySelectorAll('.riserva')].find(visible);if(el){const r=el.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2}}return null}
+    const [id,pts]=MAPGEO[MAPMODE]||MAPGEO.reale,svg=document.getElementById(id),m=svg&&svg.getScreenCTM();if(!m)return null;
+    const pt=svg.createSVGPoint();pt.x=pts[x.r][0];pt.y=pts[x.r][1];const q=pt.matrixTransform(m);return{x:q.x,y:q.y}
+  }catch(e){return null}
+}
+function playFlights(list){
   try{if(matchMedia('(prefers-reduced-motion: reduce)').matches)return}catch(e){}
-  const layer=document.getElementById(COMPACT?'flyc':'fly');
-  list.forEach((t,i)=>{
-    const g=document.createElementNS('http://www.w3.org/2000/svg','g');g.setAttribute('class','flyer');
-    const sz=COMPACT?11:13;g.innerHTML=svgShape(t.f,-sz/2,-sz/2,sz);layer.appendChild(g);
-    const a=t.from,b=t.to,mx=(a.x+b.x)/2,my=Math.min(a.y,b.y)-50;
-    if(!g.animate){g.remove();return}
-    const an=g.animate([
-      {transform:`translate(${a.x}px,${a.y}px) scale(1)`,opacity:1},
-      {transform:`translate(${mx}px,${my}px) scale(1.7)`,opacity:1,offset:.5},
-      {transform:`translate(${b.x}px,${b.y}px) scale(${t.fade?.6:1})`,opacity:t.fade?0:1}],
-      {duration:900,delay:i*120,easing:'ease-in-out',fill:'both'});
-    an.onfinish=()=>g.remove();
+  if(document.getElementById('modal')&&!document.getElementById('modal').hidden)return;
+  let lay=document.getElementById('flyov');if(!lay){lay=document.createElement('div');lay.id='flyov';document.body.appendChild(lay)}
+  list.slice(0,14).forEach((t,i)=>{
+    const a=flyPt(t.a),b=flyPt(t.b);if(!a||!b)return;
+    const el=document.createElement('div');el.className='flyc';
+    el.innerHTML=`<svg width="26" height="26" viewBox="-13 -13 26 26" aria-hidden="true">${svgShape(t.f,-9,-9,18)}</svg>`;lay.appendChild(el);
+    if(!el.animate){el.remove();return}
+    const mx=(a.x+b.x)/2,my=Math.min(a.y,b.y)-36,tr=(p,sc)=>`translate(${p.x-13}px,${p.y-13}px) scale(${sc})`;
+    const an=el.animate([{transform:tr(a,.5),opacity:0},{transform:tr(a,1.5),opacity:1,offset:.18},{transform:tr({x:mx,y:my},1.9),opacity:1,offset:.55},{transform:tr(b,1),opacity:1,offset:.9},{transform:tr(b,.4),opacity:0}],{duration:1100,delay:i*170,easing:'ease-in-out',fill:'both'});
+    an.onfinish=()=>el.remove();
   });
 }
 const DOM_QUOTES=['Fiumi di cerveza a Genova','La Superba tornerà superba.','Dui capitànii, barco in ti scheuggi'];
@@ -821,20 +835,22 @@ const INV_QUOTES=[
 // ---------- Pop-up delle mosse ----------
 const Q=[];let qBusy=false,qTimer=null,idleWaiters=[];
 const POP_MS={start:2200,act:2800,sum:2000,pass:1700,res:3400,unrest:3400,info:1800};
-function announce(kind,head,html,ms,p){
+function announce(kind,head,html,ms,p,fl){
   if(typeof document==='undefined')return;
-  Q.push({kind,head,html,ms,p});if(!qBusy)nextPop();
+  Q.push({kind,head,html,ms,p,fl});if(!qBusy)nextPop();
 }
+let curFl=null;
 function nextPop(){
   clearTimeout(qTimer);const el=document.getElementById('pop');
-  if(!Q.length){qBusy=false;el.hidden=true;const w=idleWaiters;idleWaiters=[];w.forEach(f=>f());return}
-  qBusy=true;const a=Q.shift();a.ms=a.ms||(a.kind==='act'&&a.p!==undefined?(a.p===ME?2800:5600):POP_MS[a.kind]||2000);
+  const fl=curFl;curFl=null;let extra=0;if(fl&&fl.length){playFlights(fl);extra=Math.min(fl.length,14)*170+700}
+  if(!Q.length){qBusy=false;el.hidden=true;const w=idleWaiters;idleWaiters=[];w.forEach(f=>extra?setTimeout(f,extra):f());return}
+  qBusy=true;const a=Q.shift();curFl=a.fl||null;a.ms=a.ms||(a.kind==='act'&&a.p!==undefined?(a.p===ME?2800:5600):POP_MS[a.kind]||2000);
   el.className='pop k-'+a.kind;
   el.innerHTML=`<div class="ph"><span>${loc(a.head)}</span><span class="pq">${Q.length?'+'+Q.length:''}</span></div><div class="pb">${loc(a.html)}</div><div class="pbar"><i style="animation-duration:${a.ms}ms"></i></div>`;
   el.hidden=false;qTimer=setTimeout(nextPop,a.ms);
 }
 function whenIdle(fn,delay=0){const run=()=>setTimeout(fn,delay);if(typeof document==='undefined'||(!qBusy&&!Q.length))run();else idleWaiters.push(run)}
-function resetPop(){Q.length=0;idleWaiters=[];clearTimeout(qTimer);qBusy=false;if(typeof document!=='undefined')document.getElementById('pop').hidden=true}
+function resetPop(){curFl=null;Q.length=0;idleWaiters=[];clearTimeout(qTimer);qBusy=false;if(typeof document!=='undefined')document.getElementById('pop').hidden=true}
 const T=(p,tu,oth)=>`\u0001${p}|${tu}|${oth}\u0002`;
 function loc(x){return typeof x==='string'&&x.indexOf('\u0001')>=0?x.replace(/\u0001(\d)\|([^|\u0002]*)\|([^\u0002]*)\u0002/g,(m,p,a,b)=>+p===ME?a:b.replace('$n',()=>G.players[+p].name)):x}
 const who=p=>T(p,'La tua mossa','Mossa di $n');
@@ -857,26 +873,26 @@ function touched(cid,m){if(!m)return[];const t=CARD[cid].t;
   if(t==='tra')return[m.r1,m.r2];return[m.a,m.b]}
 function playAction(p,cid,m){
   const pl=G.players[p];pl.hand.splice(pl.hand.indexOf(cid),1);pl.played.push(cid);
-  queueFly(flightsFor(cid,m));applyMove(G.B,cid,m);
+  const fl=flightsFor(cid,m);applyMove(G.B,cid,m);
   G.last={t:CARD[cid].t,pl:p,...(m||{})};
   G.actionNo++;pl.lastPlayAt=G.actionNo;
   if(!pl.hand.length&&pl.emptiedAt==null)pl.emptiedAt=G.actionNo;
   G.passes=0;G.flash={ids:touched(cid,m),t:Date.now()};
-  addLog(describe(p,cid,m),'act',who(p),undefined,p);
+  addLog(describe(p,cid,m),'act',who(p),undefined,p,fl);
 }
-function doSummon(p,s){queueFly([{f:s.f,from:regPt(s.r,s.f),to:courtPt(p),fade:true}]);applySummon(G.B,p,s);G.flash={ids:[s.r],t:Date.now()};
-  addLog(`${subj(p,'Recluti','recluta')} un ${fx(s.f)} da ${rn(s.r)}.`,'sum',T(p,'Il tuo reclutamento','Reclutamento di $n'))}
+function doSummon(p,s){applySummon(G.B,p,s);G.flash={ids:[s.r],t:Date.now()};
+  addLog(`${subj(p,'Recluti','recluta')} un ${fx(s.f)} da ${rn(s.r)}.`,'sum',T(p,'Il tuo reclutamento','Reclutamento di $n'),undefined,p,[{f:s.f,a:{r:s.r},b:{c:p}}])}
 function doPass(p,why){
   G.passes++;addLog(`${subj(p,'Passi','passa')}${why||''}.${G.passes<G.players.length?` Passaggi di fila: ${G.passes}/${G.players.length}.`:''}`,'pass',who(p));
   const n=G.players.length;
   if(G.passes>=n){
-    G.passes=0;const nr=G.B.order.find(o=>o.up).r;queueFly([0,1,2].flatMap(f=>Array.from({length:G.B.f[nr][f]},()=>({f,from:regPt(nr,f),to:SUP_PT,fade:true}))));
+    G.passes=0;const nr=G.B.order.find(o=>o.up).r;const rfl=[0,1,2].flatMap(f=>Array.from({length:G.B.f[nr][f]},()=>({f,a:{r:nr},b:{s:1}})));
     const res=resolveStruggle(G.B);
     const cnt=[0,1,2].map(f=>`${shp(f)}${res.counts[f]}`).join(' ');
     addLog(res.res>=0
       ?`Resa dei conti a ${rn(res.r)}: vincono i ${fx(res.res,1)} (${cnt}).`
       :`Resa dei conti a ${rn(res.r)}: ${sum(res.counts)?'pareggio':'quartiere vuoto'}, scoppiano i disordini. Il Piemonte avanza (${G.B.instab}/3).`,
-      res.res>=0?'res':'unrest','Tutti hanno passato: resa dei conti');
+      res.res>=0?'res':'unrest','Tutti hanno passato: resa dei conti',undefined,undefined,rfl);
     G.flash={ids:[res.r],t:Date.now()};
     if(endState(G.B)){G.over=finalResult();G.over.quote=INV_QUOTES[Math.floor(Math.random()*INV_QUOTES.length)];recordResult();UI={phase:'idle'};render();whenIdle(showEnd,200);return}
   }
@@ -1172,7 +1188,7 @@ function ensureMapVisible(){
   const w=document.getElementById('mapwrap').getBoundingClientRect(),dockTop=innerHeight-document.getElementById('dock').offsetHeight;
   if(w.top<0||w.bottom>dockTop-6){const dy=w.top-8;try{window.scrollBy({top:dy,behavior:'smooth'})}catch(e){window.scrollBy(0,dy)}}
 }
-function render(){if(!G)return;renderRec();renderMap();runFly();renderCal();renderInfo();renderDock();renderLog();sizeDock();save();ensureMapVisible();mpBroadcast()}
+function render(){if(!G)return;renderRec();renderMap();renderCal();renderInfo();renderDock();renderLog();sizeDock();save();ensureMapVisible();mpBroadcast()}
 
 // ---------- Le tue partite: statistiche v2 ----------
 const ST_KEY='neodoge.stats.v3',CODE_PRE='NDG1-',CODE_MAX=100000;
@@ -1508,7 +1524,7 @@ function mpApply(snap){
   G=snap;G.started=true;turnSeq++;
   if(G.flash)G.flash.t=Date.now();
   if(fresh){resetPop();mpLastEv=0;UI={phase:'idle'};const m=document.getElementById('modal');m.hidden=true;stopLeaves();setTimeout(centerMap,50)}
-  (G.ev||[]).filter(e=>e.id>mpLastEv).forEach(e=>{announce(e.kind,e.head,e.html,e.ms,e.p);mpLastEv=e.id});
+  (G.ev||[]).filter(e=>e.id>mpLastEv).forEach(e=>{announce(e.kind,e.head,e.html,e.ms,e.p,e.fl);mpLastEv=e.id});
   if(G.over||G.cur!==ME)UI={phase:'idle'};
   else if(G.await===ME){if(UI.phase!=='summon'){UI={phase:'idle'};render();startSummon()}}
   else if(UI.phase==='wait')UI={phase:'idle'};
